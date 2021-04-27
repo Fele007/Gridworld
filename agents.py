@@ -62,11 +62,11 @@ class VAgent(Agent):
     def train(self, episodes, learning_rate, epsilon, gamma):
         """ Starts a training cycle for an agent
         Params:
-        epsilon: The opposite of exploration, meaning if 1, the model won't learn anything new """
+        epsilon: The opposite of exploration, meaning if 1, the model won't learn anything new
+        gamma: How important is future reward compared to immediate reward? """
         
         for episode in range(episodes):
             done = False
-            episode_len = 0
             data = []
             observation, reward, done = self.env.field, 0, False
             data.append((observation, reward))
@@ -75,8 +75,29 @@ class VAgent(Agent):
                 if observation not in self.V:
                     self.V[observation] = 0.0
                 data.append((observation, reward))
-                episode_len += 1
                 if done:
                     break
-            print(f"Finished episode with a length of {episode_len}")
             self.learn(data, learning_rate, gamma)
+
+    def evaluate(self, episodes):
+        """ Starts an evaluation cycle for an agent """
+        
+        won = 0
+        sum_episode_len = 0
+        for episode in range(episodes):
+            done = False
+            data = []
+            observation, reward, done = self.env.field, 0, False
+            data.append((observation, reward))
+            while True:
+                sum_episode_len += 1
+                observation, reward, done = self.env.step(self.act(observation, 1.0))
+                if observation not in self.V:
+                    self.V[observation] = 0.0
+                data.append((observation, reward))
+                if done:
+                    if observation == self.env.winning_field:
+                        won += 1
+                    break
+        avg_episode_len = sum_episode_len / episodes
+        print(f"The current policy is able to win {won} of {episodes} episodes with an average episode length of {avg_episode_len}")

@@ -1,5 +1,3 @@
-
-
 class Gridworld(object):
     def __init__(self, height, width, winning_field, losing_field, illegal_fields, start_field):
         """ Creates a gridworld with specified dimensions and win/lose properties,
