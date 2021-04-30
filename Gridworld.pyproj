@@ -36,7 +36,7 @@
   <ItemGroup>
     <Interpreter Include="env_Gridworld\">
       <Id>env_Gridworld</Id>
-      <Version>3.9</Version>
+      <Version>3.8</Version>
       <Description>env_Gridworld (Python 3.9 (64-bit))</Description>
       <InterpreterPath>Scripts\python.exe</InterpreterPath>
       <WindowsInterpreterPath>Scripts\pythonw.exe</WindowsInterpreterPath>

@@ -4,12 +4,10 @@ class Gridworld(object):
         where fields are indexed from 1 upper left to width * height lower right 
         Params:
         illegal_fields: expects set of fields """
-        
-        #TODO: Sanity check for fields
 
         self.height = height
         self.width = width
-        self.state_space = [k for k in range(self.height * self.width + 1)]
+        self.state_space = [k for k in range(1, self.height * self.width + 1)]
         self.action_space = [1,2,3,4] # in order UP LEFT DOWN RIGHT like WASD
         self.winning_field = winning_field 
         self.losing_field = losing_field   
@@ -71,3 +69,23 @@ class Gridworld(object):
         """ Initializes the Gridworld to start state """
 
         self.field = self.start_field
+
+    def show(self):
+        print()
+        for field in self.state_space:
+            if field % self.width == 1:
+                print("", end="|")
+            if field == self.field:
+                print("AA", end="|")
+            elif field not in self.legal_fields:
+                print("XX", end="|")
+            elif field == self.winning_field:
+                print("WW", end="|")
+            elif field == self.losing_field:
+                print("LL", end="|")
+            elif int(field / 10) == 0:
+                print(" " + str(field), end="|")
+            else:
+                print(field, end="|")
+            if field % self.width == 0:
+                print("")
