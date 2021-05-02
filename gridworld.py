@@ -30,25 +30,25 @@ class Gridworld(object):
         else:
             return 0
 
-    def calculate_field(self, action):
+    def calculate_field(self, observation, action):
         field_violation = False
-        field = self.field
+        field = observation
         if action == 1:
-            field = self.field - self.width
+            field = observation - self.width
         elif action == 2:
-            field = self.field - 1
+            field = observation - 1
             if field % self.width == 0:
                 field_violation = True
         elif action == 3:
-            field = self.field + self.width
+            field = observation + self.width
         elif action == 4:
-            field = self.field + 1
-            if self.field % self.width == 0:
+            field = observation + 1
+            if observation % self.width == 0:
                 field_violation = True
         if field in self.legal_fields and not field_violation:
             return field, field_violation
         else:
-            return self.field, field_violation
+            return observation, field_violation
 
     def calculate_done(self):
         if self.field == self.winning_field or self.field == self.losing_field:
@@ -62,7 +62,7 @@ class Gridworld(object):
         Params:
         action: 1 -> Up, 2 -> Left, 3 -> Down, 4 -> Right """
 
-        self.field, field_violation = self.calculate_field(action)
+        self.field, field_violation = self.calculate_field(self.field, action)
         return self.field, self.calculate_reward(field_violation), self.calculate_done()
 
     def reset(self):
