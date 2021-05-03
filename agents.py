@@ -55,8 +55,10 @@ class Agent(ABC):
         return [self.progress, avg_episode_length, max_episode_length, min_episode_length]
 
     def plot_evaluation_data(self):
-        import matplotlib as plt
-
+        import matplotlib.pyplot as plt
+        fig, ax = plt.subplots() 
+        ax.plot([row[0] for row in self.evaluation_data], [row[1] for row in self.evaluation_data])
+        plt.show()
 
 
 class RandomAgent(Agent):
