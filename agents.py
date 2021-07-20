@@ -98,7 +98,7 @@ class RandomAgent(Agent):
                        won += 1
                     break
         avg_episode_length = sum_episode_length / episodes
-        print(f"The random agent is able to win {won} of {episodes} episodes with an average episode length of {avg_episode_length}")
+        print(f"The agent is able to win {won} of {episodes} episodes with an average episode length of {avg_episode_length}")
         return [self.progress, avg_episode_length, max_episode_length, min_episode_length]
 
 class VAgent(RandomAgent):
@@ -210,11 +210,11 @@ class QAgent(RandomAgent):
         Params:
         exploitation: The opposite of exploration, meaning if 1, the model won't learn anything new """
 
-        V_prime = 0.0 # End state does not have any future reward
+        Q_prime = 0.0 # End state does not have any future reward
         for observation, action, immediate_reward in reversed(data):
-            Q = V_prime * gamma + immediate_reward
+            Q = Q_prime * gamma + immediate_reward
             self.Q[observation][action] += (Q - self.Q[observation][action]) * learning_rate
-            V_prime = Q
+            Q_prime = Q
 
     def train(self, episodes, learning_rate, epsilon, gamma, softmax = False, evaluate = True):
         """ Starts a training cycle for an agent
