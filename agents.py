@@ -4,6 +4,7 @@ from numpy.random import default_rng
 from functions import *
 import pickle
 import time
+import torch
 
 class Agent(ABC):
     @abstractmethod
@@ -238,3 +239,120 @@ class QAgent(RandomAgent):
         for action in self.env.action_space:
             self.Q[observation][action] = 0
 
+class DQNAgent(RandomAgent):
+    def __init__(self, env, layers, nodes):
+        super().__init__(env)
+        self.model = torch.nn.Sequential(
+            torch.nn.Linear)
+        loss_fn = torch.nn.MSELoss(reduction='sum')
+        
+
+    def best_action(self, observation):
+        best_action, max_Q = None, None
+        for action in self.env.action_space:
+            try:
+                Q = self.Q[observation][action]
+            except:
+                self._init_unknown_observation(observation)
+                Q = 0.0
+            if max_Q == None or Q > max_Q:
+                best_action = action
+                max_Q = Q
+        return best_action
+
+    def softmax_action(self, observation):
+        Q = []
+        for action in self.env.action_space:
+            Q.append(self.Q[observation][action])
+        Q = softmax(Q)
+        return random.choices(self.env.action_space, weights = Q)[0]
+
+
+    def act(self, observation, epsilon = 1.0, softmax=False):
+        """ Params:
+        softmax: uses a softmax of possible actions as greedy behavior"""
+
+        randn = self.random_generator.uniform()
+        if softmax and (epsilon > randn):
+            return self.softmax_action(observation)
+        elif epsilon > randn:
+            return self.best_action(observation)
+        else:
+            return self.random_generator.choice(self.env.action_space)
+
+    def learn(self, data, learning_rate, gamma):
+        """ Starts a learning cycle
+        Params:
+        exploitation: The opposite of exploration, meaning if 1, the model won't learn anything new """
+
+        learning_rate = 1e-6
+        #optimizer = torch.optim.RMSprop(model.parameters(), lr=learning_rate)
+        for t in range(2000):
+
+            # Forward pass: compute predicted y by passing x to the model. Module objects
+            # override the __call__ operator so you can call them like functions. When
+            # doing so you pass a Tensor of input data to the Module and it produces
+            # a Tensor of output data.
+            y_pred = model(xx)
+
+            # Compute and print loss. We pass Tensors containing the predicted and true
+            # values of y, and the loss function returns a Tensor containing the
+            # loss.
+            loss = loss_fn(y_pred, y)
+            if t % 100 == 99:
+                print(t, loss.item())
+
+            # Zero the gradients before running the backward pass.
+            model.zero_grad()
+            #optimizer.zero_grad()
+
+            # Backward pass: compute gradient of the loss with respect to all the learnable
+            # parameters of the model. Internally, the parameters of each Module are stored
+            # in Tensors with requires_grad=True, so this call will compute gradients for
+            # all learnable parameters in the model.
+            loss.backward()
+            # optimizer.step()
+
+            # Update the weights using gradient descent. Each parameter is a Tensor, so
+            # we can access its gradients like we did before.
+            with torch.no_grad():
+                for param in model.parameters():
+                    param -= learning_rate * param.grad
+
+
+
+        Q_prime = 0.0 # End state does not have any future reward
+        for observation, action, immediate_reward in reversed(data):
+            Q = Q_prime * gamma + immediate_reward
+            self.Q[observation][action] += (Q - self.Q[observation][action]) * learning_rate
+            Q_prime = Q
+
+    def train(self, episodes, learning_rate, epsilon, gamma = 1, softmax = False, max_episode_length = float('inf')):
+        """ Starts a training cycle for an agent
+        Params:
+        epsilon: The opposite of exploration, meaning if 1, the model won't learn anything new
+        gamma: How important is future reward compared to immediate reward? """
+
+        for episode in range(episodes):
+            done = False
+            data = []
+            observation, done = self.env.field, False
+            self._init_unknown_observation(observation)
+            while True:
+                action = self.act(observation, epsilon, softmax)
+                result, reward, done = self.env.step(action)
+                if result not in self.Q:
+                    self._init_unknown_observation(result)
+                data.append((observation, action, reward))
+                observation = result
+                if done or len(data) > max_episode_length:
+                    episode_length = len(data)
+                    self.total_training_episodes += 1
+                    result = 'stuck'
+                    if observation == self.env.winning_field:
+                        result = 'won'
+                    elif observation == self.env.losing_field:
+                        result = 'lost'
+                    self.episode_data.append([self.total_training_episodes, episode_length, result])
+                    break
+            self.learn(data, learning_rate, gamma)
