@@ -1,30 +1,27 @@
 from abc import ABC, abstractmethod
 import random, numpy as np
 from numpy.random import default_rng
-
-def softmax(x):
-    """Compute softmax values for each sets of scores in x."""
-    e_x = np.exp(x - np.max(x))
-    return e_x / e_x.sum()
+from functions import *
+import pickle
+import time
 
 class Agent(ABC):
     @abstractmethod
     def __init__(self, env):
-        """ Params:
-        progress: Seen training data of the agent """
-
         self.env = env
-        self.evaluation_data = []
-        self.progress = 0
+        self.episode_data = []
+        self.total_training_episodes = 0
 
     @abstractmethod
     def act(self, observation, epsilon):
         pass
 
-    def evaluate(self, episodes):
+    def evaluate(self, episodes, permissible_episode_length=float('inf')):
         """ Starts an evaluation cycle for an agent
         Params:
-        episodes: Number of episodes for evaluation """
+        episodes: Number of episodes for evaluation
+        Returns:
+        {total_trainig, episodes, won, avg_episode_length, max_episode_length, min_episode_length, inference}"""
 
         won = 0
         sum_episode_length = 0
@@ -36,11 +33,10 @@ class Agent(ABC):
             observation, reward, done = self.env.field, 0, False
             observations.append(observation)
             while True:
-                self.env.show()
                 action = self.act(observation, 1.0)
                 observation, reward, done = self.env.step(action)
                 observations.append(observation)
-                if done or len(observations) > self.max_random_episode_length:
+                if done or len(observations) > permissible_episode_length:
                     episode_length = len(observations) - 1
                     if episode_length > max_episode_length or max_episode_length == 0:
                         max_episode_length = episode_length
@@ -51,61 +47,49 @@ class Agent(ABC):
                        won += 1
                     break
         avg_episode_length = sum_episode_length / episodes
-        print(f"The current policy is able to win {won} of {episodes} episodes with an average episode length of {avg_episode_length}")
-        return [self.progress, avg_episode_length, max_episode_length, min_episode_length]
+        start = time.perf_counter()
+        self.act(observation, 1.0)
+        inference = time.perf_counter() - start
+        return {'inference_time':inference, 'total_training_episodes':self.total_training_episodes, 'episodes':episodes, 'won':won, 'avg_episode_length':avg_episode_length, 'max_episode_length':max_episode_length, 'min_episode_length':min_episode_length}
 
-    def plot_evaluation_data(self):
-        import matplotlib.pyplot as plt
-        fig, ax = plt.subplots() 
-        ax.plot([row[0] for row in self.evaluation_data], [row[1] for row in self.evaluation_data])
-        plt.show()
+    def plot_episode_data(self):
+        import matplotlib.pyplot as plt      
+        for row in self.episode_data:
+            if row[2] == 'won':
+                color = 'g'
+            elif row[2] == 'stuck':
+                color = 'b'
+            elif row[2] == 'lost':
+               color = 'r'
+            else:
+                color = 'k'
+            plt.scatter(row[0], row[1], color=color, s=4)
+        #plt.show()
 
+    def store(self, location):
+        pickle.dump(self, open(location, 'wb'))
+
+    def load(self, location):
+        """ Returns a new object from a pickled representation """
+
+        return pickle.load(open(location, 'rb'))
 
 class RandomAgent(Agent):
+
     def __init__(self, env):
         super().__init__(env)
         self.random_generator = default_rng()
-    
+
+    def set_random_seed(self, seed):
+        self.random_generator = default_rng(seed)
+
     def act(self, observation, epsilon=0):
-        return random.choice(self.env.action_space)
-
-    def evaluate(self, episodes):
-        """ Starts an evaluation cycle for a random agent agent
-        Params:
-        episodes: Number of episodes for evaluation """
-
-        won = 0
-        sum_episode_length = 0
-        max_episode_length = 0
-        min_episode_length = 0
-        for episode in range(episodes):
-            done = False
-            observations = []
-            observation, reward, done = self.env.field, 0, False
-            observations.append(observation)
-            while True:
-                action = self.act(observation, 1.0)
-                observation, reward, done = self.env.step(action)
-                observations.append(observation)
-                if done:
-                    episode_length = len(observations) - 1
-                    if episode_length > max_episode_length or max_episode_length == 0:
-                        max_episode_length = episode_length
-                    if episode_length < min_episode_length or min_episode_length == 0:
-                        min_episode_length = episode_length
-                    sum_episode_length += episode_length
-                    if observation == self.env.winning_field:
-                       won += 1
-                    break
-        avg_episode_length = sum_episode_length / episodes
-        print(f"The agent is able to win {won} of {episodes} episodes with an average episode length of {avg_episode_length}")
-        return [self.progress, avg_episode_length, max_episode_length, min_episode_length]
+        return self.random_generator.choice(self.env.action_space)
 
 class VAgent(RandomAgent):
     def __init__(self, env):
         super().__init__(env)
         self.V = {env.start_field:0} # Initialize starting field V-Value
-        self.max_random_episode_length = RandomAgent(self.env).evaluate(10)[2]
 
     def best_action(self, observation):
         best_action, max_V = None, None
@@ -125,7 +109,7 @@ class VAgent(RandomAgent):
         if epsilon > self.random_generator.uniform():
             return self.best_action(observation)
         else:
-            return random.choice(self.env.action_space)
+            return self.random_generator.choice(self.env.action_space)
 
     def learn(self, data, learning_rate, gamma):
         """ Starts a learning cycle
@@ -140,7 +124,7 @@ class VAgent(RandomAgent):
             self.V[observation] += (V - self.V[observation]) * learning_rate
             V_prime = V
 
-    def train(self, episodes, learning_rate, epsilon, gamma, evaluate = None):
+    def train(self, episodes, learning_rate, epsilon, gamma=1, max_episode_length=float('inf')):
         """ Starts a training cycle for an agent
         Params:
         epsilon: The opposite of exploration, meaning if 1, the model won't learn anything new
@@ -156,15 +140,15 @@ class VAgent(RandomAgent):
                 if observation not in self.V:
                     self.V[observation] = 0.0
                 data.append((observation, reward))
-                if done or len(data) > self.max_random_episode_length:
+                if done or len(data) > max_episode_length:
                     episode_length = len(data)
-                    self.progress += 1
-                    won = None
+                    self.total_training_episodes += 1
+                    result = 'stuck'
                     if observation == self.env.winning_field:
-                        won = True
+                        result = 'won'
                     elif observation == self.env.losing_field:
-                        won = False
-                    self.evaluation_data.append([self.progress, episode_length, won])
+                        result = 'lost'
+                    self.episode_data.append([self.total_training_episodes, episode_length, result])
                     break
             self.learn(data, learning_rate, gamma)
 
@@ -174,12 +158,15 @@ class QAgent(RandomAgent):
         self.Q = {}
         # Initialize starting field Q-Values
         self._init_unknown_observation(self.env.start_field)
-        self.max_random_episode_length = RandomAgent(self.env).evaluate(10)[2]
 
     def best_action(self, observation):
         best_action, max_Q = None, None
         for action in self.env.action_space:
-            Q = self.Q[observation][action]
+            try:
+                Q = self.Q[observation][action]
+            except:
+                self._init_unknown_observation(observation)
+                Q = 0.0
             if max_Q == None or Q > max_Q:
                 best_action = action
                 max_Q = Q
@@ -203,7 +190,7 @@ class QAgent(RandomAgent):
         elif epsilon > randn:
             return self.best_action(observation)
         else:
-            return random.choice(self.env.action_space)
+            return self.random_generator.choice(self.env.action_space)
 
     def learn(self, data, learning_rate, gamma):
         """ Starts a learning cycle
@@ -216,12 +203,11 @@ class QAgent(RandomAgent):
             self.Q[observation][action] += (Q - self.Q[observation][action]) * learning_rate
             Q_prime = Q
 
-    def train(self, episodes, learning_rate, epsilon, gamma, softmax = False, evaluate = True):
+    def train(self, episodes, learning_rate, epsilon, gamma = 1, softmax = False, max_episode_length = float('inf')):
         """ Starts a training cycle for an agent
         Params:
         epsilon: The opposite of exploration, meaning if 1, the model won't learn anything new
-        gamma: How important is future reward compared to immediate reward?
-        evaluate: Episodes used for evaluation if this should take place """
+        gamma: How important is future reward compared to immediate reward? """
 
         for episode in range(episodes):
             done = False
@@ -235,15 +221,15 @@ class QAgent(RandomAgent):
                     self._init_unknown_observation(result)
                 data.append((observation, action, reward))
                 observation = result
-                if done or len(data) > self.max_random_episode_length:
+                if done or len(data) > max_episode_length:
                     episode_length = len(data)
-                    self.progress += 1
-                    won = None
+                    self.total_training_episodes += 1
+                    result = 'stuck'
                     if observation == self.env.winning_field:
-                       won = True
+                        result = 'won'
                     elif observation == self.env.losing_field:
-                        won = False
-                    self.evaluation_data.append([self.progress, episode_length, won])
+                        result = 'lost'
+                    self.episode_data.append([self.total_training_episodes, episode_length, result])
                     break
             self.learn(data, learning_rate, gamma)
 
