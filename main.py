@@ -1,11 +1,11 @@
 import numpy as np
 import random
 from gridworld import Gridworld
-from agents import RandomAgent, VAgent, QAgent
+from agents import RandomAgent, VAgent, QAgent, DQNAgent
 import time
 import matplotlib.pyplot as plt 
 
-if __name__ == "__main__":
+def evaluate_agents():
     gridworld = Gridworld(4, 4, 4, 8, {7}, 13)
     r_agent = RandomAgent(gridworld)
     
@@ -49,5 +49,7 @@ if __name__ == "__main__":
     #q_agent.plot_evaluation_data()
 
 
-
-
+if __name__ == "__main__":
+    #gridworld = Gridworld(4, 4, 4, 8, {7}, 13)
+    #agent = DQNAgent(gridworld, 3, 3)
+    evaluate_agents()

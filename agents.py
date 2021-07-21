@@ -83,6 +83,7 @@ class RandomAgent(Agent):
 
     def set_random_seed(self, seed):
         self.random_generator = default_rng(seed)
+        random.seed(seed)
 
     def act(self, observation, epsilon=0):
         return self.random_generator.choice(self.env.action_space)
@@ -240,29 +241,92 @@ class QAgent(RandomAgent):
             self.Q[observation][action] = 0
 
 class DQNAgent(RandomAgent):
-    def __init__(self, env, layers, nodes):
+    # Initialize a network
+    def initialize_network(self, n_inputs, n_hidden, n_outputs, n_hidden_layers):
+        network = list()
+        for i in range(n_hidden_layers):
+            hidden_layer = [{'weights':[random.random() for i in range(n_inputs + 1)]} for i in range(n_hidden)]
+            network.append(hidden_layer)
+        output_layer = [{'weights':[random.random() for i in range(n_hidden + 1)]} for i in range(n_outputs)]
+        network.append(output_layer)
+        return network
+
+    # Calculate neuron activation for an input
+    def activate(self, weights, inputs):
+        activation = weights[-1]
+        for i in range(len(weights)-1):
+            activation += weights[i] * inputs[i]
+        return activation
+
+    # Transfer neuron activation
+    def transfer(self, activation):
+        return 1.0 / (1.0 + exp(-activation))
+
+    # Forward propagate input to a network output
+    def forward_propagate(self, network, row):
+        inputs = row
+        for layer in network:
+            new_inputs = []
+            for neuron in layer:
+                activation = activate(neuron['weights'], inputs)
+                neuron['output'] = transfer(activation)
+                new_inputs.append(neuron['output'])
+            inputs = new_inputs
+        return inputs
+
+    # Calculate the derivative of an neuron output
+    def transfer_derivative(self, output):
+          return output * (1.0 - output)
+
+    # Backpropagate error and store in neurons
+    def backward_propagate_error(self, network, expected):
+        for i in reversed(range(len(network))):
+            layer = network[i]
+            errors = list()
+            if i != len(network)-1:
+                for j in range(len(layer)):
+                    error = 0.0
+                    for neuron in network[i + 1]:
+                        error += (neuron['weights'][j] * neuron['delta'])
+                    errors.append(error)
+            else:
+                for j in range(len(layer)):
+                    neuron = layer[j]
+                    errors.append(expected[j] - neuron['output'])
+            for j in range(len(layer)):
+                neuron = layer[j]
+                neuron['delta'] = errors[j] * transfer_derivative(neuron['output'])
+
+    # Update network weights with error
+    def update_weights(self, network, row, l_rate):
+        for i in range(len(network)):
+            inputs = row[:-1]
+            if i != 0:
+                inputs = [neuron['output'] for neuron in network[i - 1]]
+            for neuron in network[i]:
+                for j in range(len(inputs)):
+                    neuron['weights'][j] += l_rate * neuron['delta'] * inputs[j]
+                neuron['weights'][-1] += l_rate * neuron['delta']
+
+    # Make a prediction with a network
+    def predict(self, network, row):
+        outputs = forward_propagate(network, row)
+        return outputs.index(max(outputs))
+
+    def __init__(self, env, hidden_layers, nodes):
         super().__init__(env)
-        self.model = torch.nn.Sequential()
-        ## Define problem interface
-        ## -------------------------------
-        device = 'gpu'
-        self.model.add_module(torch.nn.Linear(1, nodes, device=device))
-        self.loss_fn = torch.nn.MSELoss(reduction='sum')
-        self.opt = torch.optim.SGD(model.parameters(), lr=1e-5)
-        ## -------------------------------
-        for layer in range(layers):
-            self.model.add_module(torch.nn.Linear(nodes, nodes, device=device))
+        self.model = self.initialize_network(2, 1, 2, 3)
 
     def best_action(self, observation):
-        return torch.argmax(self.model(observation))
+        return self.predict(self.model, observation)
 
     def softmax_action(self, observation):
+        # TODO: Implement for DQN
         Q = []
         for action in self.env.action_space:
             Q.append(self.Q[observation][action])
         Q = softmax(Q)
         return random.choices(self.env.action_space, weights = Q)[0]
-
 
     def act(self, observation, epsilon = 1.0, softmax=False):
         """ Params:
@@ -281,48 +345,20 @@ class DQNAgent(RandomAgent):
         Params:
         exploitation: The opposite of exploration, meaning if 1, the model won't learn anything new """
 
-        learning_rate = 1e-6
-        #optimizer = torch.optim.RMSprop(model.parameters(), lr=learning_rate)
-        for t in range(2000):
-
-            # Forward pass: compute predicted y by passing x to the model. Module objects
-            # override the __call__ operator so you can call them like functions. When
-            # doing so you pass a Tensor of input data to the Module and it produces
-            # a Tensor of output data.
-            y_pred = model(xx)
-
-            # Compute and print loss. We pass Tensors containing the predicted and true
-            # values of y, and the loss function returns a Tensor containing the
-            # loss.
-            loss = self.loss_fn(y_pred, y)
-            if t % 100 == 99:
-                print(t, loss.item())
-
-            # Zero the gradients before running the backward pass.
-            
-            model.zero_grad()
-            #optimizer.zero_grad()
-
-            # Backward pass: compute gradient of the loss with respect to all the learnable
-            # parameters of the model. Internally, the parameters of each Module are stored
-            # in Tensors with requires_grad=True, so this call will compute gradients for
-            # all learnable parameters in the model.
-            loss.backward()
-            # optimizer.step()
-
-            # Update the weights using gradient descent. Each parameter is a Tensor, so
-            # we can access its gradients like we did before.
-            with torch.no_grad():
-                for param in model.parameters():
-                    param -= learning_rate * param.grad
-
-
-
         Q_prime = 0.0 # End state does not have any future reward
-        for observation, action, immediate_reward in reversed(data):
+        for observation, action, outputs, immediate_reward in reversed(data):
+            # TODO: Implement this for DQN Agents
             Q = Q_prime * gamma + immediate_reward
+            error = Q - outputs[action]
+            backward_propagate_error(self.model, error)
             self.Q[observation][action] += (Q - self.Q[observation][action]) * learning_rate
             Q_prime = Q
+
+            expected = [0 for i in range(len(self.env.action_space))]
+            expected[row[-1]] = 1
+            sum_error += sum([(expected[i]-outputs[i])**2 for i in range(len(expected))])
+            backward_propagate_error(network, expected)
+            update_weights(network, row, l_rate)
 
     def train(self, episodes, learning_rate, epsilon, gamma = 1, softmax = False, max_episode_length = float('inf')):
         """ Starts a training cycle for an agent
@@ -334,13 +370,18 @@ class DQNAgent(RandomAgent):
             done = False
             data = []
             observation, done = self.env.field, False
-            self._init_unknown_observation(observation)
             while True:
-                action = self.act(observation, epsilon, softmax)
+                outputs = self.forward_propagate(self.model, observation)
+                randn = self.random_generator.uniform()
+                if softmax and (epsilon > randn):
+                    raise NotImplementedError("Softmax not yet implemented for DQN Agent")
+                    #action = self.softmax_action(observation)
+                elif epsilon > randn:
+                    action = outputs.index(max(outputs))
+                else:
+                    action = self.random_generator.choice(self.env.action_space)
                 result, reward, done = self.env.step(action)
-                if result not in self.Q:
-                    self._init_unknown_observation(result)
-                data.append((observation, action, reward))
+                data.append([observation, outputs, action, reward])
                 observation = result
                 if done or len(data) > max_episode_length:
                     episode_length = len(data)
