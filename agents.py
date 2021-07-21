@@ -242,23 +242,19 @@ class QAgent(RandomAgent):
 class DQNAgent(RandomAgent):
     def __init__(self, env, layers, nodes):
         super().__init__(env)
-        self.model = torch.nn.Sequential(
-            torch.nn.Linear)
-        loss_fn = torch.nn.MSELoss(reduction='sum')
-        
+        self.model = torch.nn.Sequential()
+        ## Define problem interface
+        ## -------------------------------
+        device = 'gpu'
+        self.model.add_module(torch.nn.Linear(1, nodes, device=device))
+        self.loss_fn = torch.nn.MSELoss(reduction='sum')
+        self.opt = torch.optim.SGD(model.parameters(), lr=1e-5)
+        ## -------------------------------
+        for layer in range(layers):
+            self.model.add_module(torch.nn.Linear(nodes, nodes, device=device))
 
     def best_action(self, observation):
-        best_action, max_Q = None, None
-        for action in self.env.action_space:
-            try:
-                Q = self.Q[observation][action]
-            except:
-                self._init_unknown_observation(observation)
-                Q = 0.0
-            if max_Q == None or Q > max_Q:
-                best_action = action
-                max_Q = Q
-        return best_action
+        return torch.argmax(self.model(observation))
 
     def softmax_action(self, observation):
         Q = []
@@ -298,11 +294,12 @@ class DQNAgent(RandomAgent):
             # Compute and print loss. We pass Tensors containing the predicted and true
             # values of y, and the loss function returns a Tensor containing the
             # loss.
-            loss = loss_fn(y_pred, y)
+            loss = self.loss_fn(y_pred, y)
             if t % 100 == 99:
                 print(t, loss.item())
 
             # Zero the gradients before running the backward pass.
+            
             model.zero_grad()
             #optimizer.zero_grad()
 
