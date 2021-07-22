@@ -45,7 +45,6 @@ def evaluate_agent(agent):
 
 
 if __name__ == "__main__":
-    env = Gridworld(4, 4, 4, 8, {[7]}, 13)
+    env = Gridworld(4, 4, 4, 8, {7}, 13)
     agent = DQNAgent(env, 3, 3)
-    agent = QAgent(env)
     evaluate_agent(agent)

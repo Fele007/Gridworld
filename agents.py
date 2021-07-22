@@ -5,6 +5,7 @@ from functions import *
 import pickle
 import time
 import torch
+import math
 
 class Agent(ABC):
     @abstractmethod
@@ -244,7 +245,7 @@ class DQNAgent(RandomAgent):
     # Initialize a network
     def initialize_network(self, n_inputs, n_hidden, n_outputs, n_hidden_layers):
         network = list()
-        for i in range(n_hidden_layers):
+        for _ in range(n_hidden_layers):
             hidden_layer = [{'weights':[random.random() for i in range(n_inputs + 1)]} for i in range(n_hidden)]
             network.append(hidden_layer)
         output_layer = [{'weights':[random.random() for i in range(n_hidden + 1)]} for i in range(n_outputs)]
@@ -260,16 +261,16 @@ class DQNAgent(RandomAgent):
 
     # Transfer neuron activation
     def transfer(self, activation):
-        return 1.0 / (1.0 + exp(-activation))
+        return 1.0 / (1.0 + math.exp(-activation))
 
     # Forward propagate input to a network output
     def forward_propagate(self, network, observation):
-        inputs = observation
+        inputs = [observation] # TODO: List conversion for compatibility with optimized gridworld
         for layer in network:
             new_inputs = []
             for neuron in layer:
                 activation = self.activate(neuron['weights'], inputs)
-                neuron['output'] = transfer(activation)
+                neuron['output'] = self.transfer(activation)
                 new_inputs.append(neuron['output'])
             inputs = new_inputs
         return inputs
@@ -295,12 +296,12 @@ class DQNAgent(RandomAgent):
                     errors.append(expected[j] - neuron['output'])
             for j in range(len(layer)):
                 neuron = layer[j]
-                neuron['delta'] = errors[j] * transfer_derivative(neuron['output'])
+                neuron['delta'] = errors[j] * self.transfer_derivative(neuron['output'])
 
     # Update network weights with error
     def update_weights(self, network, observation, l_rate):
         for i in range(len(network)):
-            inputs = observation
+            inputs = [observation] # TODO: List conversion for compatibility with optimized gridworld
             if i != 0:
                 inputs = [neuron['output'] for neuron in network[i - 1]]
             for neuron in network[i]:
@@ -310,12 +311,12 @@ class DQNAgent(RandomAgent):
 
     # Make a prediction with a network
     def predict(self, network, observation):
-        outputs = forward_propagate(network, observation)
+        outputs = forward_propagate(network, [observation]) # TODO: List conversion for compatibility with optimized gridworld
         return outputs.index(max(outputs))
 
     def __init__(self, env, hidden_layers, nodes):
         super().__init__(env)
-        self.model = self.initialize_network(2, 1, 2, 3)
+        self.model = self.initialize_network(1 if not isinstance(env.start_observation, list) else len(env.start_observation), nodes, len(env.action_space), hidden_layers)
 
     def best_action(self, observation):
         return self.predict(self.model, observation)
@@ -346,13 +347,13 @@ class DQNAgent(RandomAgent):
         exploitation: The opposite of exploration, meaning if 1, the model won't learn anything new """
 
         Q_prime = 0.0 # End state does not have any future reward
-        for observation, action, outputs, immediate_reward in reversed(data):
+        for observation, outputs, action, immediate_reward in reversed(data):
             # TODO: Implement this for DQN Agents
             sum_error = 0
             Q = Q_prime * gamma + immediate_reward
             Q_Target = outputs
             Q_Target[action] = Q
-            sum_error += sum([(expected[i]-outputs[i])**2 for i in range(len(expected))]) # TODO: Unnecessary to sum vector in this case but more general solution
+            sum_error += sum([(Q_Target[i]-outputs[i])**2 for i in range(len(Q_Target))]) # TODO: Unnecessary to sum vector in this case but more general solution
             self.backward_propagate_error(self.model, Q_Target)
             self.update_weights(self.model, observation, learning_rate)
             Q_prime = Q

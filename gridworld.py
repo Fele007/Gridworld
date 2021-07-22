@@ -7,12 +7,12 @@ class Gridworld(object):
 
         self.height = height
         self.width = width
-        self.state_space = [[k] for k in range(1, self.height * self.width + 1)]
+        self.state_space = [k for k in range(1, self.height * self.width + 1)]
         self.action_space = [0,1,2,3] # in order UP LEFT DOWN RIGHT like WASD
-        self.winning_observation = [winning_field] 
-        self.losing_observation = [losing_field]   
+        self.winning_observation = winning_field 
+        self.losing_observation = losing_field   
         self.legal_observations = set(self.state_space) - illegal_fields
-        self.start_observation = [start_field]
+        self.start_observation = start_field
         self.observation = start_field
 
     def reachable_states(self, field):
