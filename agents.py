@@ -31,7 +31,7 @@ class Agent(ABC):
         for episode in range(episodes):
             done = False
             observations = []
-            observation, reward, done = self.env.field, 0, False
+            observation, reward, done = self.env.observation, 0, False
             observations.append(observation)
             while True:
                 action = self.act(observation, 1.0)
@@ -44,7 +44,7 @@ class Agent(ABC):
                     if episode_length < min_episode_length or min_episode_length == 0:
                         min_episode_length = episode_length
                     sum_episode_length += episode_length
-                    if observation == self.env.winning_field:
+                    if observation == self.env.winning_observation:
                        won += 1
                     break
         avg_episode_length = sum_episode_length / episodes
@@ -91,12 +91,12 @@ class RandomAgent(Agent):
 class VAgent(RandomAgent):
     def __init__(self, env):
         super().__init__(env)
-        self.V = {env.start_field:0} # Initialize starting field V-Value
+        self.V = {env.start_observation:0} # Initialize starting field V-Value
 
     def best_action(self, observation):
         best_action, max_V = None, None
         for action in self.env.action_space:
-            field, field_violation = self.env.calculate_field(observation, action)
+            field, field_violation = self.env.calculate_observation(observation, action)
             if field_violation:
                 continue
             if field not in self.V:
@@ -135,7 +135,7 @@ class VAgent(RandomAgent):
         for episode in range(episodes):
             done = False
             data = []
-            observation, reward, done = self.env.field, 0, False
+            observation, reward, done = self.env.observation, 0, False
             data.append((observation, reward))
             while True:
                 observation, reward, done = self.env.step(self.act(observation, epsilon))
@@ -146,9 +146,9 @@ class VAgent(RandomAgent):
                     episode_length = len(data)
                     self.total_training_episodes += 1
                     result = 'stuck'
-                    if observation == self.env.winning_field:
+                    if observation == self.env.winning_observation:
                         result = 'won'
-                    elif observation == self.env.losing_field:
+                    elif observation == self.env.losing_observation:
                         result = 'lost'
                     self.episode_data.append([self.total_training_episodes, episode_length, result])
                     break
@@ -159,7 +159,7 @@ class QAgent(RandomAgent):
         super().__init__(env)
         self.Q = {}
         # Initialize starting field Q-Values
-        self._init_unknown_observation(self.env.start_field)
+        self._init_unknown_observation(self.env.start_observation)
 
     def best_action(self, observation):
         best_action, max_Q = None, None
@@ -214,7 +214,7 @@ class QAgent(RandomAgent):
         for episode in range(episodes):
             done = False
             data = []
-            observation, done = self.env.field, False
+            observation, done = self.env.observation, False
             self._init_unknown_observation(observation)
             while True:
                 action = self.act(observation, epsilon, softmax)
@@ -227,9 +227,9 @@ class QAgent(RandomAgent):
                     episode_length = len(data)
                     self.total_training_episodes += 1
                     result = 'stuck'
-                    if observation == self.env.winning_field:
+                    if observation == self.env.winning_observation:
                         result = 'won'
-                    elif observation == self.env.losing_field:
+                    elif observation == self.env.losing_observation:
                         result = 'lost'
                     self.episode_data.append([self.total_training_episodes, episode_length, result])
                     break
@@ -263,12 +263,12 @@ class DQNAgent(RandomAgent):
         return 1.0 / (1.0 + exp(-activation))
 
     # Forward propagate input to a network output
-    def forward_propagate(self, network, row):
-        inputs = row
+    def forward_propagate(self, network, observation):
+        inputs = observation
         for layer in network:
             new_inputs = []
             for neuron in layer:
-                activation = activate(neuron['weights'], inputs)
+                activation = self.activate(neuron['weights'], inputs)
                 neuron['output'] = transfer(activation)
                 new_inputs.append(neuron['output'])
             inputs = new_inputs
@@ -298,9 +298,9 @@ class DQNAgent(RandomAgent):
                 neuron['delta'] = errors[j] * transfer_derivative(neuron['output'])
 
     # Update network weights with error
-    def update_weights(self, network, row, l_rate):
+    def update_weights(self, network, observation, l_rate):
         for i in range(len(network)):
-            inputs = row[:-1]
+            inputs = observation
             if i != 0:
                 inputs = [neuron['output'] for neuron in network[i - 1]]
             for neuron in network[i]:
@@ -309,8 +309,8 @@ class DQNAgent(RandomAgent):
                 neuron['weights'][-1] += l_rate * neuron['delta']
 
     # Make a prediction with a network
-    def predict(self, network, row):
-        outputs = forward_propagate(network, row)
+    def predict(self, network, observation):
+        outputs = forward_propagate(network, observation)
         return outputs.index(max(outputs))
 
     def __init__(self, env, hidden_layers, nodes):
@@ -348,17 +348,14 @@ class DQNAgent(RandomAgent):
         Q_prime = 0.0 # End state does not have any future reward
         for observation, action, outputs, immediate_reward in reversed(data):
             # TODO: Implement this for DQN Agents
+            sum_error = 0
             Q = Q_prime * gamma + immediate_reward
-            error = Q - outputs[action]
-            backward_propagate_error(self.model, error)
-            self.Q[observation][action] += (Q - self.Q[observation][action]) * learning_rate
+            Q_Target = outputs
+            Q_Target[action] = Q
+            sum_error += sum([(expected[i]-outputs[i])**2 for i in range(len(expected))]) # TODO: Unnecessary to sum vector in this case but more general solution
+            self.backward_propagate_error(self.model, Q_Target)
+            self.update_weights(self.model, observation, learning_rate)
             Q_prime = Q
-
-            expected = [0 for i in range(len(self.env.action_space))]
-            expected[row[-1]] = 1
-            sum_error += sum([(expected[i]-outputs[i])**2 for i in range(len(expected))])
-            backward_propagate_error(network, expected)
-            update_weights(network, row, l_rate)
 
     def train(self, episodes, learning_rate, epsilon, gamma = 1, softmax = False, max_episode_length = float('inf')):
         """ Starts a training cycle for an agent
@@ -369,7 +366,7 @@ class DQNAgent(RandomAgent):
         for episode in range(episodes):
             done = False
             data = []
-            observation, done = self.env.field, False
+            observation, done = self.env.observation, False
             while True:
                 outputs = self.forward_propagate(self.model, observation)
                 randn = self.random_generator.uniform()
@@ -387,9 +384,9 @@ class DQNAgent(RandomAgent):
                     episode_length = len(data)
                     self.total_training_episodes += 1
                     result = 'stuck'
-                    if observation == self.env.winning_field:
+                    if observation == self.env.winning_observation:
                         result = 'won'
-                    elif observation == self.env.losing_field:
+                    elif observation == self.env.losing_observation:
                         result = 'lost'
                     self.episode_data.append([self.total_training_episodes, episode_length, result])
                     break
