@@ -245,8 +245,10 @@ class DQNAgent(RandomAgent):
     # Initialize a network
     def initialize_network(self, n_inputs, n_hidden, n_outputs, n_hidden_layers):
         network = list()
+        input_layer = [{'weights':[random.random() for i in range(n_inputs + 1)]} for i in range(n_hidden)]
+        network.append(input_layer)
         for _ in range(n_hidden_layers):
-            hidden_layer = [{'weights':[random.random() for i in range(n_inputs + 1)]} for i in range(n_hidden)]
+            hidden_layer = [{'weights':[random.random() for i in range(n_hidden + 1)]} for i in range(n_hidden)]
             network.append(hidden_layer)
         output_layer = [{'weights':[random.random() for i in range(n_hidden + 1)]} for i in range(n_outputs)]
         network.append(output_layer)
@@ -261,7 +263,8 @@ class DQNAgent(RandomAgent):
 
     # Transfer neuron activation
     def transfer(self, activation):
-        return 1.0 / (1.0 + math.exp(-activation))
+        # return 1.0 / (1.0 + math.exp(-activation)) Sigmoid
+        return max(0.0, activation)
 
     # Forward propagate input to a network output
     def forward_propagate(self, network, observation):
@@ -277,8 +280,12 @@ class DQNAgent(RandomAgent):
 
     # Calculate the derivative of an neuron output
     def transfer_derivative(self, output):
-          return output * (1.0 - output)
-
+        # return output * (1.0 - output) Sigmoid
+        if (output <= 0):
+            return 0
+        else:
+            return 1.0
+        
     # Backpropagate error and store in neurons
     def backward_propagate_error(self, network, expected):
         for i in reversed(range(len(network))):
@@ -311,7 +318,7 @@ class DQNAgent(RandomAgent):
 
     # Make a prediction with a network
     def predict(self, network, observation):
-        outputs = forward_propagate(network, [observation]) # TODO: List conversion for compatibility with optimized gridworld
+        outputs = self.forward_propagate(network, observation)
         return outputs.index(max(outputs))
 
     def __init__(self, env, hidden_layers, nodes):
